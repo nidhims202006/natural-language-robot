@@ -1,6 +1,6 @@
 # natural-language-robot
 A 3D robotic arm simulation controlled by plain English commands using AI and Inverse Kinematics
-# 🤖 Natural Language to Robot Motion
+#  Natural Language to Robot Motion
 
 A Python-based 3D robotic arm simulation controlled by plain English commands.
 
@@ -14,4 +14,4 @@ Watch: A 6-DOF robotic arm think, plan, and execute the motion in real-time.
 - **tkinter** — Control panel GUI
 
 ## Status
-🔨 In active development — building day by day.
+ In active development — building day by day.
