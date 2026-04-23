@@ -1,0 +1,22 @@
+# Your secret API key — NEVER upload this
+.env
+
+# Python junk files
+__pycache__/
+*.pyc
+*.pyo
+
+# Virtual environments
+venv/
+env/
+
+# IDE settings
+.vscode/
+.idea/
+
+# Auto-generated robot file (rebuilt each run)
+robot_arm.urdf
+
+# Mac/Windows junk
+.DS_Store
+Thumbs.db
