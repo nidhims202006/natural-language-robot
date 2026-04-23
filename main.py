@@ -1,69 +1,66 @@
 """
 Natural Language to Robot Motion
-Day 2: Basic 3D World — your first PyBullet scene
+Day 3: 6-DOF Robotic Arm in the Scene
 """
 import pybullet as p
 import pybullet_data
 import time
+from generate_arm import save_arm_urdf
 
-# ── Connect to PyBullet with a visual window ──────────────────────────────────
-# Think of this like turning on a TV — it opens the 3D display window
-physics_client = p.connect(p.GUI)
+# ── CUSTOMIZE YOUR ARM ────────────────────────────────────────────────────────
+ARM_SCALE   = 1.0
+ARM_LENGTHS = [0.30, 0.25, 0.20, 0.15, 0.10, 0.05]
+# ─────────────────────────────────────────────────────────────────────────────
 
-# Tell PyBullet where its built-in models are (like plane.urdf)
+# Generate the arm blueprint file before loading
+save_arm_urdf(scale=ARM_SCALE, link_lengths=ARM_LENGTHS)
+
+# Start PyBullet
+p.connect(p.GUI)
 p.setAdditionalSearchPath(pybullet_data.getDataPath())
-
-# Set gravity (9.81 m/s² downward — same as real world)
 p.setGravity(0, 0, -9.81)
-
-# ── Camera starting view ──────────────────────────────────────────────────────
 p.resetDebugVisualizerCamera(
-    cameraDistance=2.0,   # How far back the camera is
-    cameraYaw=45,          # Rotated 45° to the right
-    cameraPitch=-30,       # Tilted 30° downward
-    cameraTargetPosition=[0, 0, 0]
+    cameraDistance=1.8, cameraYaw=45,
+    cameraPitch=-25, cameraTargetPosition=[0, 0, 0.5]
 )
-
-# Turn on shadows for nicer visuals
 p.configureDebugVisualizer(p.COV_ENABLE_SHADOWS, 1)
 p.configureDebugVisualizer(p.COV_ENABLE_RGB_BUFFER_PREVIEW, 0)
 
-# ── Load the flat floor ───────────────────────────────────────────────────────
+# Load floor and arm
 floor_id = p.loadURDF("plane.urdf")
-print(" Floor loaded!")
-
-# ── Add a test box so the scene isn't empty ───────────────────────────────────
-# createCollisionShape = defines the physics shape (for bumping into things)
-# createVisualShape    = defines how it looks (color, size)
-box_collision = p.createCollisionShape(
-    p.GEOM_BOX,
-    halfExtents=[0.1, 0.1, 0.1]   # Half-size in each direction
+arm_id = p.loadURDF(
+    "robot_arm.urdf", [0, 0, 0],
+    p.getQuaternionFromEuler([0, 0, 0]),
+    useFixedBase=True   # Bolted to the floor, doesn't fall over
 )
-box_visual = p.createVisualShape(
-    p.GEOM_BOX,
-    halfExtents=[0.1, 0.1, 0.1],
-    rgbaColor=[0.8, 0.2, 0.2, 1]  # Red, Green, Blue, Alpha (0-1 scale)
-)
-box_id = p.createMultiBody(
-    baseMass=1.0,                         # 1 kilogram
-    baseCollisionShapeIndex=box_collision,
-    baseVisualShapeIndex=box_visual,
-    basePosition=[0.5, 0.0, 0.1]          # x=0.5m right, y=0 center, z=0.1m up
-)
-print(" Test red box created!")
+print(f" Arm loaded! Body ID = {arm_id}")
 
-print("\n CAMERA CONTROLS (click inside the 3D window first):")
-print("   Left-click + drag  → Rotate the view")
-print("   Scroll wheel       → Zoom in / out")
-print("   Right-click + drag → Pan (slide) the view")
-print("\n⏹️  Press Ctrl+C here in the terminal to quit\n")
+# Print joint information
+num_joints = p.getNumJoints(arm_id)
+print(f"\n📋 Your arm has {num_joints} joints:")
+revolute_joints = []
+for i in range(num_joints):
+    info      = p.getJointInfo(arm_id, i)
+    jname     = info[1].decode("utf-8")
+    jtype_num = info[2]
+    jtype_str = {0: "REVOLUTE", 1: "PRISMATIC", 4: "FIXED"}.get(jtype_num, "?")
+    print(f"   [{i}] {jname}  ({jtype_str})")
+    if jtype_num == p.JOINT_REVOLUTE:
+        revolute_joints.append(i)
 
-# ── Main simulation loop ──────────────────────────────────────────────────────
-# This is the heartbeat of the simulation — runs 240 times per second
+# Set a natural starting pose (slightly bent looks better than fully upright)
+start_angles = [0, 0.3, -0.8, 0, 0.5, 0]
+for i, joint_idx in enumerate(revolute_joints):
+    if i < len(start_angles):
+        p.resetJointState(arm_id, joint_idx, start_angles[i])
+
+print("\n🎮 Camera: left-drag=rotate | scroll=zoom | right-drag=pan")
+print("⏹️  Ctrl+C to quit\n")
+
 try:
     while True:
-        p.stepSimulation()          # Advance physics by one tiny step
-        time.sleep(1 / 240)         # Wait 1/240th of a second
+        p.stepSimulation()
+        time.sleep(1 / 240)
 except KeyboardInterrupt:
-    print("\n Simulation ended.")
+    print("\n Goodbye!")
     p.disconnect()
