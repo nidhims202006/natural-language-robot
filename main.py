@@ -1,21 +1,18 @@
 """
 Natural Language to Robot Motion
-Day 3: 6-DOF Robotic Arm in the Scene
+Day 4: Terrain Swapping + Arm Scale Slider
 """
 import pybullet as p
 import pybullet_data
 import time
 from generate_arm import save_arm_urdf
+from terrain import TerrainManager
 
-# ── CUSTOMIZE YOUR ARM ────────────────────────────────────────────────────────
 ARM_SCALE   = 1.0
 ARM_LENGTHS = [0.30, 0.25, 0.20, 0.15, 0.10, 0.05]
-# ─────────────────────────────────────────────────────────────────────────────
 
-# Generate the arm blueprint file before loading
 save_arm_urdf(scale=ARM_SCALE, link_lengths=ARM_LENGTHS)
 
-# Start PyBullet
 p.connect(p.GUI)
 p.setAdditionalSearchPath(pybullet_data.getDataPath())
 p.setGravity(0, 0, -9.81)
@@ -26,41 +23,61 @@ p.resetDebugVisualizerCamera(
 p.configureDebugVisualizer(p.COV_ENABLE_SHADOWS, 1)
 p.configureDebugVisualizer(p.COV_ENABLE_RGB_BUFFER_PREVIEW, 0)
 
-# Load floor and arm
-floor_id = p.loadURDF("plane.urdf")
-arm_id = p.loadURDF(
-    "robot_arm.urdf", [0, 0, 0],
-    p.getQuaternionFromEuler([0, 0, 0]),
-    useFixedBase=True   # Bolted to the floor, doesn't fall over
-)
-print(f" Arm loaded! Body ID = {arm_id}")
+# Load terrain and arm
+terrain = TerrainManager()
+terrain.load_flat_floor()
 
-# Print joint information
-num_joints = p.getNumJoints(arm_id)
-print(f"\n📋 Your arm has {num_joints} joints:")
-revolute_joints = []
-for i in range(num_joints):
-    info      = p.getJointInfo(arm_id, i)
-    jname     = info[1].decode("utf-8")
-    jtype_num = info[2]
-    jtype_str = {0: "REVOLUTE", 1: "PRISMATIC", 4: "FIXED"}.get(jtype_num, "?")
-    print(f"   [{i}] {jname}  ({jtype_str})")
-    if jtype_num == p.JOINT_REVOLUTE:
-        revolute_joints.append(i)
+arm_id = p.loadURDF("robot_arm.urdf", [0, 0, 0],
+                     p.getQuaternionFromEuler([0, 0, 0]), useFixedBase=True)
 
-# Set a natural starting pose (slightly bent looks better than fully upright)
-start_angles = [0, 0.3, -0.8, 0, 0.5, 0]
-for i, joint_idx in enumerate(revolute_joints):
+def get_revolute_joints(robot_id):
+    return [i for i in range(p.getNumJoints(robot_id))
+            if p.getJointInfo(robot_id, i)[2] == p.JOINT_REVOLUTE]
+
+revolute_joints = get_revolute_joints(arm_id)
+start_angles    = [0, 0.3, -0.8, 0, 0.5, 0]
+for i, j in enumerate(revolute_joints):
     if i < len(start_angles):
-        p.resetJointState(arm_id, joint_idx, start_angles[i])
+        p.resetJointState(arm_id, j, start_angles[i])
 
-print("\n🎮 Camera: left-drag=rotate | scroll=zoom | right-drag=pan")
-print("⏹️  Ctrl+C to quit\n")
+# ── Sliders in the PyBullet sidebar ──────────────────────────────────────────
+terrain_slider = p.addUserDebugParameter("Terrain  0=Lab  1=Rocky  2=Sand", 0, 2, 0)
+scale_slider   = p.addUserDebugParameter("Arm Scale", 0.3, 2.5, 1.0)
+
+current_terrain = 0
+current_scale   = 1.0
+TERRAIN_MAP     = {0: "lab", 1: "rocky", 2: "sand"}
+
+print(" Terrain + Scale controls active — use the sliders on the left panel!")
+print(" Ctrl+C to quit\n")
 
 try:
     while True:
         p.stepSimulation()
+
+        # Check terrain slider
+        t_val = round(p.readUserDebugParameter(terrain_slider))
+        if t_val != current_terrain:
+            current_terrain = t_val
+            terrain.swap_terrain(TERRAIN_MAP[t_val])
+
+        # Check scale slider — rebuild arm if scale changed by ≥ 0.1
+        new_scale = round(p.readUserDebugParameter(scale_slider), 1)
+        if abs(new_scale - current_scale) >= 0.1:
+            current_scale = new_scale
+            p.removeBody(arm_id)
+            save_arm_urdf(scale=current_scale, link_lengths=ARM_LENGTHS)
+            arm_id = p.loadURDF("robot_arm.urdf", [0, 0, 0],
+                                 p.getQuaternionFromEuler([0, 0, 0]),
+                                 useFixedBase=True)
+            revolute_joints = get_revolute_joints(arm_id)
+            for i, j in enumerate(revolute_joints):
+                if i < len(start_angles):
+                    p.resetJointState(arm_id, j, start_angles[i])
+            print(f" Arm rebuilt at scale {current_scale}x")
+
         time.sleep(1 / 240)
+
 except KeyboardInterrupt:
     print("\n Goodbye!")
     p.disconnect()
