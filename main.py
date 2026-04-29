@@ -1,19 +1,29 @@
 """
 Natural Language to Robot Motion
- Inverse Kinematics — arm moves to target positions
+Day 8: Control Panel GUI connected to simulation
 """
 import pybullet as p
 import pybullet_data
 import time
+import queue
 from generate_arm import save_arm_urdf
 from terrain import TerrainManager
 from objects import SceneObjects
 from ik_solver import IKSolver
+from gui import ControlPanel
 
 ARM_SCALE   = 1.0
 ARM_LENGTHS = [0.30, 0.25, 0.20, 0.15, 0.10, 0.05]
 
 save_arm_urdf(scale=ARM_SCALE, link_lengths=ARM_LENGTHS)
+
+# Communication channel between GUI and simulation
+command_queue = queue.Queue()
+
+# Start GUI in background
+panel = ControlPanel(command_queue)
+panel.start()
+time.sleep(0.6)   # Give GUI time to open
 
 p.connect(p.GUI)
 p.setAdditionalSearchPath(pybullet_data.getDataPath())
@@ -38,36 +48,40 @@ for i, j in enumerate(revolute_joints):
 
 scene = SceneObjects()
 scene.setup_default_scene()
-
-# Let things settle
 for _ in range(150):
     p.stepSimulation()
     time.sleep(1 / 480)
 
-# Create the IK solver
 ik = IKSolver(arm_id)
+terrain_slider  = p.addUserDebugParameter("Terrain  0=Lab  1=Rocky  2=Sand", 0, 2, 0)
+current_terrain = 0
+TERRAIN_MAP     = {0: "lab", 1: "rocky", 2: "sand"}
 
-# ── Test IK: move arm to visit each object ────────────────────────────────────
-print("\n IK Test: Moving arm to visit each object...")
-test_targets = ["red_cube", "blue_cube", "green_cube"]
+panel.log("✅ Simulation ready! (AI brain not connected yet — comes Day 9)")
+panel.set_status("● Ready — GUI connected to simulation")
 
-for obj_name in test_targets:
-    pos = scene.get_position(obj_name)
-    if pos:
-        # Hover above the object
-        hover_pos = [pos[0], pos[1], pos[2] + 0.12]
-        ik.move_to_position(hover_pos)
-        time.sleep(0.4)
-
-ik.move_to_home()
-
-print("\n IK test complete!")
-print(" Ctrl+C to quit\n")
+print("\n✅ Two windows open: PyBullet (3D) + Control Panel (GUI)")
+print("⏹️  Ctrl+C to quit\n")
 
 try:
     while True:
         p.stepSimulation()
+
+        t_val = round(p.readUserDebugParameter(terrain_slider))
+        if t_val != current_terrain:
+            current_terrain = t_val
+            terrain.swap_terrain(TERRAIN_MAP[t_val])
+
+        try:
+            msg_type, msg_data = command_queue.get_nowait()
+            if msg_type == "command":
+                panel.log(f"📨 Command received: '{msg_data}' (AI connects Day 9)")
+                panel.set_status("● Ready")
+        except queue.Empty:
+            pass
+
         time.sleep(1 / 240)
+
 except KeyboardInterrupt:
-    print("\n Goodbye!")
+    print("\n👋 Goodbye!")
     p.disconnect()
